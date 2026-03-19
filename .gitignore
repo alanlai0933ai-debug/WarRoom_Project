@@ -7,3 +7,4 @@ python_env/
 # 隱藏 Mac/Windows 的系統暫存檔
 .DS_Store
 Thumbs.db
+war_room.db
