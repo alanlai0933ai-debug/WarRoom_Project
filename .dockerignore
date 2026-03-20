@@ -1,0 +1,16 @@
+# flyctl launch added from .gitignore
+# 隱藏 Python 虛擬環境（因為檔案太大，且換電腦要重裝）
+**\python_env
+
+# 隱藏機密保險箱（絕對不能把密碼推上 GitHub）
+**\.env
+
+# 隱藏 Mac/Windows 的系統暫存檔
+**\.DS_Store
+**\Thumbs.db
+**\war_room.db
+
+# flyctl launch added from python_env\.gitignore
+# Created by venv; see https://docs.python.org/3/library/venv.html
+python_env\**\*
+fly.toml

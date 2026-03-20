@@ -1,423 +1,407 @@
-from nicegui import ui
+from nicegui import app, ui  # 🌟 這裡多匯入了一個 app，用來管理身分記憶！
 import database
-import calendar        # 🌟 新增：Python 內建的超強月曆計算機
-from datetime import datetime # 🌟 新增：用來取得現在是幾月
-from nicegui import ui
-import database
+import calendar        
+from datetime import datetime 
+import ui_components 
+import os
 
 # ==========================================
-# 🧠 系統大腦：動態專案清單
+# 🧠 系統設定 (全域變數)
 # ==========================================
 PROJECT_LIST = [
     '🌊 專案 A (海岸清理)',
-    '🏛️ 專案 B (標案企劃)',
+    '🏛️ 專案 B (新北巡檢)',
     '🌱 專案 C (臨時交辦事項)'
 ]
 
 # ==========================================
-# 🛠️ 模組化工具：共用的「唯一情報詳細視窗」
+# 終極視覺革命：Sleek Pro Dark (極簡專業暗黑主題)
 # ==========================================
-def open_task_detail_modal(t):
-    # 防呆：如果是假資料就不打開
-    if t.get('id', -1) < 0:
-        ui.notify('這是示範卡片，無法查看細節哦！', type='warning')
-        return
+pro_dark_theme = '''
+body { background-color: #0f172a !important; color: #f8fafc !important; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important; }
+.q-card { background: #1e293b !important; border: 1px solid rgba(255, 255, 255, 0.08) !important; border-radius: 12px !important; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important; color: #f1f5f9 !important; }
+.bg-red-900\\/20 { background: rgba(127, 29, 29, 0.15) !important; border: 1px solid rgba(239, 68, 68, 0.2) !important; border-left: 4px solid #ef4444 !important; }
+.q-tab { color: #94a3b8 !important; }
+.q-tab--active { color: #38bdf8 !important; }
+.q-btn--outline { border-color: rgba(255, 255, 255, 0.15) !important; color: #e2e8f0 !important; }
+.q-field--outlined .q-field__control { background: #0f172a !important; border-radius: 8px !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; }
+.q-field__native, .q-field__prefix, .q-field__suffix, .q-field__input { color: #f8fafc !important; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; border: 2px solid #0f172a; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+'''
 
-    with ui.dialog() as detail_dialog, ui.card().classes('w-[500px] p-6 rounded-2xl'):
-        ui.label('🔍 任務詳細情報').classes('text-xl font-extrabold text-blue-900 mb-2')
-        ui.label(t['title']).classes('text-lg font-bold text-gray-800 mb-4')
-        
-        # 顯示基本資訊
-        with ui.row().classes('w-full gap-4 text-sm text-gray-600 mb-4 bg-gray-50 p-3 rounded-lg'):
-            ui.label(f'👤 主責: {t["owner"] if t["owner"] else "未指定"}')
-            ui.label(f'📅 期限: {t["due_date"] if t["due_date"] else "未指定"}')
-            ui.label(f'🏷️ 標籤: {t["tag"]}')
-        
-        # 編輯區
-        new_status = ui.select(['規劃中', '待追蹤', '追蹤狀況', '執行中', '卡關'], label='細部狀態', value=t['detailed_status']).classes('w-full mb-2')
-        new_notes = ui.textarea('🏢 廠商資訊與追蹤日誌', value=t['vendor_and_notes']).classes('w-full mb-4')
-        
-        # --- 邏輯定義區 ---
-        
-        # 1. 儲存修改
-        def save_details():
-            database.update_task_details(t['id'], new_status.value, new_notes.value)
-            ui.notify('💾 情報更新成功！', type='positive', position='top-right')
-            detail_dialog.close()
-            render_kanban_board.refresh()
+# ==========================================
+# 🛡️ 終極防護罩：Firebase Google 登入引擎
+# ==========================================
+# 這裡注入了你剛剛拿到的金鑰，以及呼叫 Google 登入視窗的魔法腳本
+firebase_js = '''
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAq1hfpgcTDaVm2RSd6m-ny8mSiy9tDE94",
+    authDomain: "warroom-f3e51.firebaseapp.com",
+    projectId: "warroom-f3e51",
+    storageBucket: "warroom-f3e51.firebasestorage.app",
+    messagingSenderId: "531055949529",
+    appId: "1:531055949529:web:8055c85c0a78c1efbc30c8"
+  };
+  
+  if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+  }
+  const auth = firebase.auth();
+  const provider = new firebase.auth.GoogleAuthProvider();
+
+  async function signInWithGoogle() {
+      try {
+          const result = await auth.signInWithPopup(provider);
+          const user = result.user;
+          return { name: user.displayName, email: user.email, photo: user.photoURL };
+      } catch (error) {
+          console.error(error);
+          return { error: error.message };
+      }
+  }
+  
+  async function signOutGoogle() {
+      await auth.signOut();
+  }
+</script>
+'''
+
+# ==========================================
+# 🏠 狀態隔離：為每位使用者建立獨立的戰情室包廂
+# ==========================================
+@ui.page('/')
+async def main_page():  # 🌟 注意這裡變成了 async，為了等待登入結果
+    # 將 CSS 與 Firebase 腳本注入到這個包廂
+    ui.add_head_html(f'<style>{pro_dark_theme}</style>\n{firebase_js}')
+
+    # 🔒 安全檢查點 (Checkpoint)：你登入了嗎？
+    if not app.storage.user.get('authenticated', False):
+        # ❌ 如果沒登入：顯示科技感登入大廳
+        with ui.column().classes('w-full h-screen items-center justify-center bg-slate-900'):
+            ui.icon('admin_panel_settings', size='100px', color='blue-500').classes('mb-4')
+            ui.label('專案戰略指揮中心').classes('text-4xl font-extrabold text-white mb-2 tracking-widest')
+            ui.label('Project War Room - Secure Access').classes('text-slate-400 mb-8 tracking-widest')
             
-        # 2. 徹底刪除
-        def delete_this_task():
-            database.delete_task(t['id'])
-            ui.notify('🗑️ 任務已徹底刪除', type='warning', position='top-right')
-            detail_dialog.close()
-            render_kanban_board.refresh()
-
-        # 3. 🌟 新增：快速完工邏輯
-        def quick_complete():
-            database.update_task_status(t['id'], '✅ 已完成')
-            ui.notify(f'🎉 任務【{t["title"]}】已結案！', type='positive', position='top-right')
-            detail_dialog.close()
-            render_kanban_board.refresh()
-
-        # --- 底部按鈕區 ---
-        with ui.row().classes('w-full justify-between items-center mt-2'):
-            # 左側：功能操作區
-            with ui.row().classes('gap-1'):
-                ui.button('🗑️ 刪除', on_click=delete_this_task, color='red').props('flat text-red-500 hover:bg-red-50')
+            with ui.card().classes('p-8 bg-slate-800 items-center rounded-2xl shadow-2xl border border-slate-700 w-96'):
+                ui.label('系統權限驗證').classes('text-xl font-bold text-slate-200 mb-6')
                 
-                # 只有在還沒完成的情況下，才顯示完工按鈕
-                if t['status'] != '✅ 已完成':
-                    ui.button('✅ 標記完工', on_click=quick_complete, color='green').props('flat text-green-600 hover:bg-green-50')
-            
-            # 右側：存檔/關閉區
-            with ui.row().classes('gap-2'):
-                ui.button('關閉', on_click=detail_dialog.close, color='gray').props('flat')
-                ui.button('💾 儲存修改', on_click=save_details).props('rounded color="primary"')
-    
-    # 建立完立刻打開
-    detail_dialog.open()
-
-# ==========================================
-# 🛠️ 模組化工具：生產「動態高階任務卡片」的機器
-# ==========================================
-def create_rich_card(t):
-    urgent_flag = (t['is_urgent'] == 1)
-    is_dummy = (t['id'] < 0) # 判斷是不是我們寫死的假卡片
-    
-    with ui.card().classes('w-full mb-3 cursor-pointer hover:shadow-lg transition-all border-l-4 ' + ('border-red-500' if urgent_flag else 'border-blue-500')):
-        with ui.row().classes('w-full justify-between items-start no-wrap'):
-            
-            # 1. 打勾完成功能 (維持不變)
-            def on_checkbox_change(e):
-                if e.value and not is_dummy:
-                    database.update_task_status(t['id'], '✅ 已完成')
-                    ui.notify(f'🎉 恭喜完成：「{t["title"]}」！', type='positive', position='top-right')
-                    render_kanban_board.refresh()
-            
-            is_done = (t['status'] == '✅ 已完成')
-            ui.checkbox(t['title'], value=is_done, on_change=on_checkbox_change).classes('font-bold text-gray-800 text-md')
-
-            # 🌟 2. 新增：卡片右側的「情報解鎖」按鈕
-            ui.button(icon='info', color='blue-500', on_click=lambda: open_task_detail_modal(t)).props('flat dense rounded').tooltip('查看與編輯情報')
-            
-        # 團隊黃金需求：負責人與日期 (維持不變)
-        if t['owner'] or t['due_date']:
-            with ui.row().classes('w-full items-center gap-4 mt-1 pl-8 text-sm text-gray-600'):
-                if t['owner']: ui.label(f'👤 {t["owner"]}')
-                if t['due_date']: ui.label(f'📅 {t["due_date"]}')
-
-        # 底部標籤區 (維持不變)
-        with ui.row().classes('w-full justify-between items-center mt-2 pl-8'):
-            ui.label(t['tag']).classes('text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md')
-            if urgent_flag:
-                ui.label('🔥 今日急件').classes('text-xs text-red-600 font-bold bg-red-100 px-2 py-1 rounded-md')
-
-# ==========================================
-# 🛠️ 模組化工具：月曆專用「彩色行程標籤」
-# ==========================================
-# ==========================================
-# 🛠️ 模組化工具：月曆專用「彩色行程標籤」
-# ==========================================
-def create_event_badge(t):
-    color = 'bg-blue-500' if 'A' in t['project_name'] else ('bg-purple-500' if 'B' in t['project_name'] else 'bg-orange-500')
-    if t['status'] == '✅ 已完成': color = 'bg-gray-400 line-through'
-
-    badge = ui.label(t['title']).classes(f'text-xs text-white px-2 py-1 rounded truncate cursor-pointer {color} hover:opacity-80 transition-opacity w-full shadow-sm')
-
-    # 🌟 刪掉原本一大串對話框程式碼，改成這簡單的一行呼叫！
-    badge.on('click', lambda: open_task_detail_modal(t))
-
-# ==========================================
-# 🆕 升級版「新增任務」彈出視窗 (Dialog)
-# ==========================================
-with ui.dialog() as new_task_dialog, ui.card().classes('w-[500px] p-6 rounded-2xl shadow-2xl'):
-    ui.label('✨ 新增戰略任務').classes('text-xl font-extrabold text-blue-900 mb-4')
-    
-    task_name = ui.input('任務名稱 / 查核點').classes('w-full mb-2')
-    with ui.row().classes('w-full gap-2 no-wrap'):
-        project_select = ui.select(PROJECT_LIST, label='所屬專案').classes('w-1/2')
-        tag_select = ui.select(['行政作業', '數據處理', '現場會勘', '廠商協調', '活動辦理', '其他'], label='任務標籤').classes('w-1/2')
-
-    with ui.row().classes('w-full gap-2 no-wrap mt-2'):
-        owner_input = ui.input('👤 主責人員').classes('w-1/2')
-        due_date_input = ui.input('📅 預計完成日').props('type="date"').classes('w-1/2')
-
-    with ui.row().classes('w-full gap-2 no-wrap mt-2 items-center'):
-        detailed_status_select = ui.select(['規劃中', '待追蹤', '追蹤狀況', '執行中', '卡關'], label='🔍 細部追蹤狀態').classes('w-2/3')
-        is_urgent = ui.checkbox('🔥 今日急件').classes('text-red-600 font-bold w-1/3 mt-2')
-
-    vendor_notes_input = ui.textarea('🏢 廠商資訊與追蹤日誌').classes('w-full mt-2')
-    ui.separator().classes('my-4')
-    
-    def save_to_db():
-        database.add_task(
-            project_name=project_select.value,
-            title=task_name.value,
-            tag=tag_select.value,
-            owner=owner_input.value,
-            due_date=due_date_input.value,
-            status='📋 待辦事項',
-            detailed_status=detailed_status_select.value,
-            vendor_and_notes=vendor_notes_input.value,
-            is_urgent=1 if is_urgent.value else 0
-        )
-        ui.notify(f'✅ 已成功將「{task_name.value}」寫入資料庫！', type='positive', position='top-right')
-        new_task_dialog.close()
-        render_kanban_board.refresh() # 瞬間刷新看板！
-
-    with ui.row().classes('w-full justify-end gap-2'):
-        ui.button('取消', on_click=new_task_dialog.close, color='gray').props('flat')
-        ui.button('💾 寫入大腦', on_click=save_to_db).props('rounded color="primary"')
-
-# ==========================================
-# 🎨 頂部導覽列
-# ==========================================
-with ui.header(elevated=True).style('background-color: #0f172a').classes('items-center justify-between px-6'):
-    with ui.row().classes('items-center'):
-        ui.icon('query_stats', size='md').classes('text-white')
-        ui.label('專案戰略指揮中心').classes('text-2xl font-bold text-white ml-2')
-    ui.button('➕ 新增任務', on_click=new_task_dialog.open, color='blue-500').classes('font-bold shadow-md')
-
-# ==========================================
-# 🏠 主體排版與全局大盤：全動態戰略結界
-# ==========================================
-@ui.refreshable
-def render_kanban_board():
-    # 1. 向大腦索取所有真實任務
-    all_tasks = database.get_all_tasks()
-
-    # ==========================================
-    # 📊 區塊 4：全局大進度條 (🌟 已經搬進結界，且擁有真實算力)
-    # ==========================================
-    with ui.row().classes('w-full max-w-7xl mx-auto mt-6 px-4 gap-6'):
-        with ui.card().classes('w-full bg-white shadow-md rounded-xl p-6'):
-            ui.label('🏆 專案全局查核點進度').classes('text-lg font-extrabold text-gray-800 mb-4')
-            with ui.row().classes('w-full items-center gap-6'):
-                
-                # 💡 魔法計算機：自動幫清單上的每一個專案畫一個專屬進度條！
-                for proj_name in PROJECT_LIST:
-                    # 抓出這個專案的所有任務，以及已完成的任務
-                    proj_tasks = [t for t in all_tasks if t['project_name'] == proj_name]
-                    total_count = len(proj_tasks)
-                    done_count = len([t for t in proj_tasks if t['status'] == '✅ 已完成'])
+                async def perform_login():
+                    result = await ui.run_javascript('signInWithGoogle()', timeout=120.0)
                     
-                    # 計算百分比 (防呆機制：如果這個專案還沒建任務，進度就是 0)
-                    progress = (done_count / total_count) if total_count > 0 else 0
-                    percent_str = f"{int(progress * 100)}%"
-                    
-                    # 畫出該專案的進度條 (flex-1 讓所有專案自動平分寬度)
-                    with ui.column().classes('flex-1 min-w-[200px]'):
-                        with ui.row().classes('w-full justify-between items-end mb-1'):
-                            ui.label(proj_name).classes('font-bold text-slate-800 truncate')
-                            ui.label(f'{percent_str} ({done_count}/{total_count})').classes('text-sm text-gray-500')
-                        ui.linear_progress(value=progress, show_value=False).props('color="blue" size="12px rounded"')
-
-        # -----------------------------------
-        # ⬅️ 左側面板 (佔比約 30%) - 真實連動版！
-        # -----------------------------------
-        with ui.column().classes('w-[30%] min-w-[320px] gap-6'):
-            
-            # 區塊 3：今日必須擊破 (真實急件)
-            with ui.card().classes('w-full bg-red-50 border border-red-100 shadow-md'):
-                ui.label('🚨 今日必須擊破 (Focus)').classes('text-lg font-extrabold text-red-800 mb-2')
-                
-                # 💡 魔法 1：自動篩選出「未完成」且「是急件」的任務
-                urgent_tasks = [t for t in all_tasks if t['status'] != '✅ 已完成' and t['is_urgent'] == 1]
-                
-                if not urgent_tasks:
-                    ui.label('🎉 太棒了！今天沒有待處理的急件！').classes('text-gray-500 font-bold mt-2')
-                else:
-                    for t in urgent_tasks:
-                        # 直接用我們的卡片製造機畫出來！這代表在左邊也能直接打勾！
-                        create_rich_card(t)
-
-            # 區塊 2：動態月曆區
-            with ui.card().classes('w-full shadow-md'):
-                ui.label('📅 本月查核點 (Milestones)').classes('text-lg font-extrabold text-gray-800 mb-2')
-                
-                # 💡 魔法 2：讓月曆永遠自動對準真正的「今天」
-                from datetime import date
-                today_str = date.today().strftime('%Y-%m-%d')
-                ui.date(value=today_str).classes('w-full shadow-none')
-                
-                ui.separator().classes('my-2')
-                
-                # 💡 魔法 3：抓出有「預計完成日」且未完成的任務，當作查核點提示
-                upcoming_tasks = [t for t in all_tasks if t['status'] != '✅ 已完成' and t['due_date']]
-                upcoming_tasks.sort(key=lambda x: x['due_date']) # 照日期排隊
-                
-                if not upcoming_tasks:
-                    ui.label('目前沒有即將到來的查核點').classes('text-sm text-gray-500 italic')
-                else:
-                    # 只顯示最近的 3 筆查核點
-                    for t in upcoming_tasks[:3]:
-                        with ui.row().classes('w-full items-center gap-2 mb-1 no-wrap'):
-                            ui.icon('flag', color='blue' if 'A' in t['project_name'] else 'purple')
-                            # 只顯示日期的後段 (例如 03-25) 和標題
-                            ui.label(f"{t['due_date'][5:]} - {t['title']}").classes('text-sm font-bold text-gray-700 truncate')
-
-        # -----------------------------------
-        # ➡️ 右側面板 (佔比約 70%) - 看板 + 月曆 + 歷史庫
-        # -----------------------------------
-        with ui.column().classes('flex-1 w-full min-w-[500px]'):
-            with ui.card().classes('w-full shadow-md p-0'):
-                tab_objects = {}
-                
-                # 1. 頂部標籤列
-                with ui.tabs().classes('w-full bg-slate-100 text-gray-700 font-bold') as tabs:
-                    # 🌟 新增：最前面的大月曆標籤
-                    tab_calendar = ui.tab('📅 專案總覽大月曆')
-                    
-                    for proj_name in PROJECT_LIST:
-                        tab_objects[proj_name] = ui.tab(proj_name) 
-                    tab_archive = ui.tab('🗄️ 歷史成就庫')
-
-                # 2. 標籤對應的面板內容 (預設打開大月曆！)
-                with ui.tab_panels(tabs, value=tab_calendar).classes('w-full bg-transparent p-4'):
-                    
-                    # ==========================================
-                    # 🌟 史詩級新戰場：Google 月曆視角
-                    # ==========================================
-                    with ui.tab_panel(tab_calendar):
-                        now = datetime.now()
-                        ui.label(f'🗓️ {now.year} 年 {now.month} 月戰情日曆').classes('text-2xl font-extrabold text-gray-800 mb-4')
+                    if result and 'email' in result:
+                        user_email = result['email']
                         
-                        # 畫出 7 欄的網格 (利用背景色跟 gap-px 做出完美的 1px 邊框效果)
-                        with ui.grid(columns=7).classes('w-full gap-px bg-gray-300 border border-gray-300 rounded-lg overflow-hidden shadow-sm'):
-                            
-                            # 畫出星期一到星期日的表頭
-                            days_of_week = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
-                            for d in days_of_week:
-                                with ui.column().classes('bg-slate-100 p-2 items-center justify-center w-full'):
-                                    ui.label(d).classes('font-bold text-gray-600 text-sm')
-                            
-                            # 計算這個月的日曆排列 (firstweekday=6 代表從週日開始)
-                            cal = calendar.Calendar(firstweekday=6)
-                            month_days = cal.monthdayscalendar(now.year, now.month)
-                            
-                            # 畫出每一天的格子
-                            for week in month_days:
-                                for day in week:
-                                    # 每一格的底色與設定
-                                    with ui.column().classes('bg-white p-2 min-h-[120px] w-full justify-start items-stretch gap-1'):
-                                        if day == 0:
-                                            # 這格不屬於這個月
-                                            ui.label('').classes('text-gray-300')
-                                        else:
-                                            # 印出日期數字
-                                            is_today = (day == now.day)
-                                            day_label = ui.label(str(day)).classes('text-sm font-bold mb-1 ' + ('text-white bg-blue-600 rounded-full w-6 h-6 flex items-center justify-center' if is_today else 'text-gray-500'))
-                                            
-                                            # 🔍 從大腦撈出「期限是這一天」的任務，塞進格子裡！
-                                            current_date_str = f"{now.year}-{now.month:02d}-{day:02d}"
-                                            day_tasks = [t for t in all_tasks if t['due_date'] == current_date_str]
-                                            
-                                            for t in day_tasks:
-                                                create_event_badge(t)
-
-                    # ==========================================
-                    # 專案 A、B、C 看板 (維持不變)
-                    # ==========================================
-                    for proj_name in PROJECT_LIST:
-                        with ui.tab_panel(tab_objects[proj_name]):
-                            with ui.row().classes('w-full items-start gap-4 no-wrap overflow-x-auto'):
-                                my_proj_tasks = [t for t in all_tasks if t['project_name'] == proj_name]
-                                
-                                with ui.column().classes('w-1/2 bg-slate-50 p-4 rounded-xl'):
-                                    ui.label('📋 執行中事項').classes('font-bold text-gray-700 mb-2')
-                                    for t in my_proj_tasks:
-                                        if t['status'] == '📋 待辦事項':
-                                            create_rich_card(t)
-                                
-                                with ui.column().classes('w-1/2 bg-orange-50 p-4 rounded-xl'):
-                                    ui.label('🛑 等待外部回覆 (Blocked)').classes('font-bold text-orange-800 mb-2')
-                                    for t in my_proj_tasks:
-                                        if t['status'] == '🛑 卡關中':
-                                            create_rich_card(t)
-
-                    # ==========================================
-                    # 🌟 神級進化：可互動的歷史成就庫
-                    # ==========================================
-                    with ui.tab_panel(tab_archive):
-                        with ui.row().classes('w-full justify-between items-center mb-4'):
-                            ui.label('🏆 專案歷史結算紀錄').classes('text-lg font-bold text-gray-800')
-                            ui.button('📥 匯出 Excel', color='green').props('rounded outline icon="download"')
-                        
-                        # 1. 欄位定義：多加一個名為 'actions' (操作) 的欄位
-                        columns = [
-                            {'name': 'date', 'label': '完成日期', 'field': 'date', 'sortable': True, 'align': 'left'},
-                            {'name': 'project', 'label': '所屬專案', 'field': 'project', 'sortable': True, 'align': 'left'},
-                            {'name': 'task', 'label': '任務名稱 / 查核點', 'field': 'task', 'align': 'left'},
-                            {'name': 'tag', 'label': '標籤', 'field': 'tag', 'align': 'center'},
-                            {'name': 'actions', 'label': '操作', 'field': 'actions', 'align': 'center'} # 🌟 新增的操作欄位
+                        # 🛡️ 資安修補：建立團隊白名單 (請把你們團隊的 Email 寫在這裡)
+                        ALLOWED_EMAILS = [
+                            'alanlai0933.ai@gmail.com', 
+                            'alanlai0933@gmail.com' ,
+                            'coastalcleanup00@gmail.com'
                         ]
                         
-                        # 2. 資料準備：把任務的 id 也偷偷塞進表格資料裡，這樣按鈕才知道要操作誰
-                        completed_tasks = [t for t in all_tasks if t['status'] == '✅ 已完成']
-                        rows = [
-                            {
-                                'id': t['id'], # 🌟 隱藏的身分證
-                                'date': t['due_date'] if t['due_date'] else '-', 
-                                'project': t['project_name'], 
-                                'task': t['title'], 
-                                'tag': t['tag']
-                            } for t in completed_tasks
-                        ]
+                        if user_email in ALLOWED_EMAILS:
+                            # ✅ 白名單內，允許放行
+                            app.storage.user['authenticated'] = True
+                            app.storage.user['email'] = user_email
+                            app.storage.user['name'] = result['name']
+                            app.storage.user['avatar'] = result['photo']
+                            ui.notify(f"歡迎指揮官：{result['name']} 歸隊！", type='positive', position='top')
+                            ui.navigate.to('/')
+                        else:
+                            # ❌ 不在白名單，當場踢出
+                            ui.notify(f'警告：信箱 {user_email} 未獲授權！', type='negative', position='top')
+                    else:
+                        error_msg = result.get('error', '未知錯誤') if result else '取消登入'
+                        ui.notify(f'登入失敗：{error_msg}', type='negative', position='top')
+                
+                ui.button('使用 Google 帳號登入', icon='login', on_click=perform_login).props('rounded color="blue-600" size="lg"').classes('w-full font-bold shadow-lg')
+        
+        return # 🌟 關鍵：在這裡 return，底下的看板程式碼就不會被執行，徹底保護資料！
+
+    # ✅ 如果已登入：進入戰略看板區！
+    app_state = {
+        'current_tab': '📅 專案總覽大月曆',
+        'expanded_tasks': set(),  
+        'search_query': '',
+        'calendar_year': datetime.now().year,    
+        'calendar_month': datetime.now().month   
+    }
+
+    # ==========================================
+    # 🎨 頂部導覽列 (新增身分識別與登出按鈕)
+    # ==========================================
+    with ui.header(elevated=True).style('background-color: rgba(15, 23, 42, 0.8); backdrop-filter: blur(8px);').classes('items-center justify-between px-6 border-b border-white/10'):
+        with ui.row().classes('items-center'):
+            ui.icon('query_stats', size='md').classes('text-blue-400')
+            ui.label('專案戰略指揮中心').classes('text-2xl font-bold text-white ml-2 tracking-wider')
+        
+        # 🌟 右側身分區
+        with ui.row().classes('items-center gap-4'):
+            if app.storage.user.get('avatar'):
+                ui.image(app.storage.user.get('avatar')).classes('w-8 h-8 rounded-full border border-slate-500')
+            ui.label(app.storage.user.get('name', '未知名稱')).classes('text-slate-200 font-bold')
+            
+            async def perform_logout():
+                await ui.run_javascript('signOutGoogle()')
+                app.storage.user.clear()
+                ui.notify('已安全登出系統', type='info', position='top')
+                ui.navigate.to('/')
+                
+            ui.button('登出', on_click=perform_logout, color='slate-700').props('outline rounded size="sm" text-color="white"')
+            ui.button('➕ 新增任務', on_click=lambda: ui_components.open_new_task_dialog(PROJECT_LIST, render_kanban_board.refresh), color='blue-600').classes('font-bold shadow-lg')
+
+    def update_search(e):
+        app_state['search_query'] = e.value
+        render_kanban_board.refresh() 
+
+    with ui.row().classes('w-full max-w-7xl mx-auto mt-6 px-4'):
+        ui.input('🔍 全局智慧搜尋 (支援：任務名稱 / 負責人 / 標籤 / 日誌 / 狀態)', 
+                 value=app_state['search_query'], on_change=update_search) \
+          .classes('w-full text-lg').props('clearable outlined dark rounded-xl shadow-sm debounce="500"')
+
+    # ==========================================
+    # 🏠 主體排版與全局大盤
+    # ==========================================
+    @ui.refreshable
+    def render_kanban_board():
+        all_tasks = database.get_all_tasks()
+
+        needs_refresh = False
+        for p in [t for t in all_tasks if not t.get('parent_id') and t.get('status') != '✅ 已完成']:
+            children = [c for c in all_tasks if c.get('parent_id') == p['id']]
+            if children and all(c.get('status') == '✅ 已完成' for c in children):
+                database.update_task_status(p['id'], '✅ 已完成')
+                ui.notify(f'🎊 捷報！子任務達成，大項目自動通關！', type='positive', position='top')
+                needs_refresh = True 
+        if needs_refresh: all_tasks = database.get_all_tasks()
+
+        def get_task_earned(t):
+            if t.get('status') == '✅ 已完成': return t.get('weight', 1)
+            target = t.get('target_total', 1)
+            prog = t.get('current_progress', 0)
+            if target > 1: return (prog / target) * t.get('weight', 1)
+            return 0
+
+        query = app_state['search_query'].lower()
+        if query:
+            matched_ids = set()
+            for t in all_tasks:
+                search_text = f"{t.get('title','')} {t.get('tag','')} {t.get('owner','')} {t.get('detailed_status','')} {t.get('vendor_and_notes','')} {t.get('project_name','')}".lower()
+                if query in search_text: matched_ids.add(t['id'])
+
+            final_ids = set(matched_ids)
+            for t in all_tasks:
+                if t['id'] in matched_ids and t.get('parent_id'): final_ids.add(t['parent_id']) 
+                if t.get('parent_id') in matched_ids: final_ids.add(t['id'])        
+            display_tasks = [t for t in all_tasks if t['id'] in final_ids]
+        else: display_tasks = all_tasks
+
+        with ui.row().classes('w-full max-w-7xl mx-auto mt-4 px-4 gap-6'):
+            
+            with ui.card().classes('w-full shadow-lg rounded-xl p-6 border-t-4 border-blue-500 bg-white/5 backdrop-blur-md'):
+                ui.label('🏆 專案加權實獲值 (EVM) 總盤').classes('text-lg font-extrabold text-gray-100 mb-4 tracking-wide')
+                with ui.row().classes('w-full items-center gap-6'):
+                    for proj_name in PROJECT_LIST:
+                        proj_tasks = [t for t in all_tasks if t['project_name'] == proj_name]
+                        top_tasks = [t for t in proj_tasks if not t.get('parent_id')]
                         
-                        # 3. 召喚表格元件
-                        history_table = ui.table(columns=columns, rows=rows, row_key='id').classes('w-full')
+                        total_proj_weight = sum(t.get('weight', 1) for t in top_tasks)
+                        earned_proj_weight = 0
+                        
+                        for p_task in top_tasks:
+                            children = [c for c in proj_tasks if c.get('parent_id') == p_task['id']]
+                            if children:
+                                c_total = sum(c.get('weight', 1) for c in children)
+                                c_earned = sum(get_task_earned(c) for c in children)
+                                earned_proj_weight += (c_earned / c_total) * p_task.get('weight', 1) if c_total > 0 else 0
+                            else:
+                                earned_proj_weight += get_task_earned(p_task)
+                        
+                        progress = (earned_proj_weight / total_proj_weight) if total_proj_weight > 0 else 0
+                        percent_str = f"{int(progress * 100)}%"
+                        
+                        with ui.column().classes('flex-1 min-w-[200px]'):
+                            with ui.row().classes('w-full justify-between items-end mb-1'):
+                                ui.label(proj_name).classes('font-bold text-slate-200 truncate')
+                                ui.label(f'{percent_str} (權分 {earned_proj_weight:.1f} / {total_proj_weight:.1f})').classes('text-sm text-blue-400 font-bold')
+                            ui.linear_progress(value=progress, show_value=False).props('color="blue-4" size="12px rounded"')
 
-                        # ==========================================
-                        # 🧠 定義三個按鈕被按下時的大腦反應
-                        # ==========================================
-                        # 【復原任務】
-                        def handle_restore(e):
-                            task_id = e.args['id']
-                            database.update_task_status(task_id, '📋 待辦事項') # 改回待辦狀態
-                            ui.notify('↩️ 任務已復原，請回看板查看！', type='info', position='top-right')
-                            render_kanban_board.refresh() # 瞬間刷新
+            with ui.column().classes('w-[30%] min-w-[320px] gap-6'):
+                with ui.card().classes('w-full bg-red-900/20 border border-red-500/30 shadow-md backdrop-blur-md'):
+                    ui.label('🚨 今日必須擊破 (Focus)').classes('text-lg font-extrabold text-red-400 mb-2 tracking-wide')
+                    urgent_tasks = [t for t in display_tasks if t['status'] != '✅ 已完成' and t['is_urgent'] == 1]
+                    
+                    if not urgent_tasks: ui.label('🎉 今日目前無急件！').classes('text-gray-400 font-bold mt-2')
+                    else:
+                        with ui.column().classes('w-full max-h-[350px] overflow-y-auto pr-2 pb-2'):
+                            for t in urgent_tasks:
+                                ui_components.create_rich_card(t, display_tasks, app_state, render_kanban_board.refresh)
 
-                        # 【刪除任務】
-                        def handle_delete(e):
-                            task_id = e.args['id']
-                            database.delete_task(task_id) # 徹底抹除
-                            ui.notify('🗑️ 歷史紀錄已徹底刪除！', type='warning', position='top-right')
-                            render_kanban_board.refresh() # 瞬間刷新
+                with ui.card().classes('w-full bg-white/5 border border-white/10 shadow-md backdrop-blur-md'):
+                    ui.label('📅 近期查核點 (Upcoming)').classes('text-lg font-extrabold text-gray-200 mb-2 tracking-wide')
+                    today_str = datetime.now().strftime('%Y-%m-%d')
+                    upcoming_tasks = [t for t in display_tasks if t['status'] != '✅ 已完成' and t['due_date'] and t['due_date'] >= today_str]
+                    upcoming_tasks.sort(key=lambda x: x['due_date']) 
+                    
+                    if not upcoming_tasks: ui.label('目前沒有即將到來的查核點').classes('text-sm text-gray-400 italic')
+                    else:
+                        with ui.column().classes('w-full max-h-[350px] overflow-y-auto pr-2 pb-2'):
+                            for t in upcoming_tasks: 
+                                ui_components.create_rich_card(t, display_tasks, app_state, render_kanban_board.refresh, is_subtask=True)
+
+            with ui.column().classes('flex-1 w-full min-w-[500px]'):
+                with ui.card().classes('w-full shadow-md p-0 bg-transparent border border-white/10 overflow-hidden'):
+                    tab_objects = {}
+                    with ui.tabs().classes('w-full bg-white/5 text-gray-300 font-bold') as tabs:
+                        tab_calendar = ui.tab('📅 專案總覽大月曆')
+                        for proj_name in PROJECT_LIST: tab_objects[proj_name] = ui.tab(proj_name) 
+                        tab_archive = ui.tab('🗄️ 歷史成就庫')
+
+                    with ui.tab_panels(tabs, value=app_state['current_tab'], on_change=lambda e: app_state.update(current_tab=e.value)).classes('w-full bg-transparent p-4'):                    
+                        with ui.tab_panel(tab_calendar):
+                            c_year = app_state['calendar_year']
+                            c_month = app_state['calendar_month']
+                            now = datetime.now()
+
+                            def prev_month():
+                                if app_state['calendar_month'] == 1:
+                                    app_state['calendar_month'] = 12
+                                    app_state['calendar_year'] -= 1
+                                else: app_state['calendar_month'] -= 1
+                                render_kanban_board.refresh()
+                                
+                            def next_month():
+                                if app_state['calendar_month'] == 12:
+                                    app_state['calendar_month'] = 1
+                                    app_state['calendar_year'] += 1
+                                else: app_state['calendar_month'] += 1
+                                render_kanban_board.refresh()
+                                
+                            def go_today():
+                                app_state['calendar_year'] = now.year
+                                app_state['calendar_month'] = now.month
+                                render_kanban_board.refresh()
+
+                            with ui.row().classes('w-full justify-between items-center mb-4'):
+                                ui.label(f'🗓️ {c_year} 年 {c_month} 月戰情日曆').classes('text-2xl font-extrabold text-gray-100')
+                                with ui.row().classes('gap-2'):
+                                    ui.button('◀ 上個月', on_click=prev_month, color='slate-700').props('outline rounded size="sm" text-color="white"')
+                                    ui.button('⏺ 回到本月', on_click=go_today, color='blue-500').props('outline rounded size="sm" text-color="blue-3"')
+                                    ui.button('下個月 ▶', on_click=next_month, color='slate-700').props('outline rounded size="sm" text-color="white"')
+
+                            with ui.grid(columns=7).classes('w-full gap-px bg-slate-700 border border-slate-700 rounded-lg overflow-hidden shadow-sm'):
+                                for d in ['週日', '週一', '週二', '週三', '週四', '週五', '週六']:
+                                    with ui.column().classes('bg-white/10 p-2 items-center justify-center w-full'): 
+                                        ui.label(d).classes('font-bold text-gray-300 text-sm')
+                                
+                                month_days = calendar.Calendar(firstweekday=6).monthdayscalendar(c_year, c_month)
+                                for week in month_days:
+                                    for day in week:
+                                        with ui.column().classes('bg-slate-900/60 p-2 min-h-[120px] w-full justify-start items-stretch gap-1 hover:bg-slate-800/80 transition-colors'):
+                                            if day == 0: ui.label('').classes('text-gray-300')
+                                            else:
+                                                is_today = (day == now.day and c_month == now.month and c_year == now.year)
+                                                ui.label(str(day)).classes('text-sm font-bold mb-1 ' + ('text-white bg-blue-600 rounded-full w-6 h-6 flex items-center justify-center shadow-lg shadow-blue-500/50' if is_today else 'text-gray-400'))
+                                                current_date_str = f"{c_year}-{c_month:02d}-{day:02d}"
+                                                day_tasks = [t for t in display_tasks if t['due_date'] == current_date_str] 
+                                                for t in day_tasks:
+                                                    ui_components.create_event_badge(t, render_kanban_board.refresh)
+
+                        for proj_name in PROJECT_LIST:
+                            with ui.tab_panel(tab_objects[proj_name]):
+                                with ui.row().classes('w-full items-start gap-4 no-wrap overflow-x-auto'):
+                                    my_proj_tasks = [t for t in display_tasks if t['project_name'] == proj_name]
+                                    top_level_tasks = [t for t in my_proj_tasks if not t.get('parent_id')]
+                                    
+                                    with ui.column().classes('w-1/2 bg-white/5 p-4 rounded-xl border border-white/10'):
+                                        ui.label('📋 執行中事項').classes('font-bold text-gray-200 mb-2')
+                                        for t in top_level_tasks:
+                                            if t.get('status') == '📋 待辦事項':
+                                                ui_components.create_rich_card(t, display_tasks, app_state, render_kanban_board.refresh)
+                                    
+                                    with ui.column().classes('w-1/2 bg-orange-500/10 p-4 rounded-xl border border-orange-500/20'):
+                                        ui.label('🛑 等待外部回覆 (Blocked)').classes('font-bold text-orange-300 mb-2')
+                                        for t in top_level_tasks:
+                                            if t.get('status') == '🛑 卡關中':
+                                                ui_components.create_rich_card(t, display_tasks, app_state, render_kanban_board.refresh)
+
+                        with ui.tab_panel(tab_archive):
+                            with ui.row().classes('w-full justify-between items-center mb-4'):
+                                ui.label('🏆 專案歷史結算紀錄').classes('text-lg font-bold text-gray-100 tracking-wide')
+                                
+                                def export_to_excel():
+                                    import csv
+                                    filename = f'專案戰情結算報告_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
+                                    with open(filename, 'w', newline='', encoding='utf-8-sig') as f:
+                                        writer = csv.writer(f)
+                                        writer.writerow(['完成日期', '所屬專案', '任務名稱 / 查核點', '權重', '目標達成數', '標籤', '追蹤日誌 (結案紀錄)'])
+                                        for t in [t for t in display_tasks if t['status'] == '✅ 已完成']:
+                                            writer.writerow([t['due_date'] if t['due_date'] else '未押日期', t['project_name'], t['title'], t.get('weight', 1), f"{t.get('current_progress', 0)} / {t.get('target_total', 1)}", t['tag'], t.get('vendor_and_notes', '')])
+                                    ui.download(filename)
+                                    ui.notify(f'📥 報表已成功下載！', type='positive', position='top')
+
+                                ui.button('📥 匯出 EXCEL', on_click=export_to_excel, color='green-6').props('rounded outline icon="download" shadow')
                             
-                        # 【檢視任務】
-                        def handle_view(e):
-                            task_id = e.args['id']
-                            # 從大腦記憶中把這包任務的完整情報找出來
-                            t = next((task for task in all_tasks if task['id'] == task_id), None)
-                            if t:
-                                # 彈出唯讀的歷史情報視窗
-                                with ui.dialog() as view_dialog, ui.card().classes('w-[500px] p-6 rounded-2xl'):
-                                    ui.label('🔍 歷史任務歸檔情報').classes('text-xl font-extrabold text-gray-700 mb-2')
-                                    ui.label(t['title']).classes('text-lg font-bold text-gray-800 mb-4')
-                                    ui.label(f'負責人: {t["owner"] if t["owner"] else "未指定"} | 期限: {t["due_date"]}').classes('text-sm text-gray-600 mb-4')
-                                    ui.textarea('🏢 廠商資訊與追蹤日誌 (已歸檔)', value=t['vendor_and_notes']).classes('w-full mb-4').props('readonly')
-                                    ui.button('關閉', on_click=view_dialog.close).props('rounded color="gray" w-full')
-                                view_dialog.open()
+                            columns = [
+                                {'name': 'date', 'label': '完成日期', 'field': 'date', 'sortable': True, 'align': 'left'},
+                                {'name': 'project', 'label': '所屬專案', 'field': 'project', 'sortable': True, 'align': 'left'},
+                                {'name': 'task', 'label': '任務名稱 / 查核點', 'field': 'task', 'align': 'left'},
+                                {'name': 'weight', 'label': '⚖️ 權重', 'field': 'weight', 'sortable': True, 'align': 'center'},
+                                {'name': 'progress', 'label': '🎯 達成數', 'field': 'progress', 'align': 'center'},
+                                {'name': 'tag', 'label': '標籤', 'field': 'tag', 'align': 'center'},
+                                {'name': 'actions', 'label': '操作', 'field': 'actions', 'align': 'center'}
+                            ]
+                            
+                            completed_tasks = [t for t in display_tasks if t['status'] == '✅ 已完成'] 
+                            rows = [{'id': t['id'], 'date': t['due_date'] if t['due_date'] else '-', 'project': t['project_name'], 'task': t['title'], 'weight': t.get('weight', 1), 'progress': f"{t.get('current_progress', 0)} / {t.get('target_total', 1)}", 'tag': t['tag']} for t in completed_tasks]
+                            
+                            history_table = ui.table(columns=columns, rows=rows, row_key='id').classes('w-full bg-transparent').props('dark flat bordered')
 
-                        # 4. 把大腦反應綁定到表格上
-                        history_table.on('restore', handle_restore)
-                        history_table.on('delete', handle_delete)
-                        history_table.on('view', handle_view)
+                            def handle_restore(e):
+                                database.update_task_status(e.args['id'], '📋 待辦事項')
+                                ui.notify('↩️ 任務已復原！', type='info', position='top-right')
+                                render_kanban_board.refresh() 
 
-                        # 🌟 5. 黑科技魔法插槽：利用前端框架語法，在最後一欄畫出三個漂亮的圖示按鈕
-                        history_table.add_slot('body-cell-actions', '''
-                            <q-td :props="props">
-                                <q-btn flat dense round color="blue" icon="visibility" @click="() => $parent.$emit('view', props.row)" />
-                                <q-btn flat dense round color="green" icon="undo" @click="() => $parent.$emit('restore', props.row)" />
-                                <q-btn flat dense round color="red" icon="delete" @click="() => $parent.$emit('delete', props.row)" />
-                            </q-td>
-                        ''')
+                            def handle_delete(e):
+                                database.delete_task(e.args['id']) 
+                                ui.notify('🗑️ 歷史紀錄已徹底刪除！', type='warning', position='top-right')
+                                render_kanban_board.refresh() 
+                                
+                            def handle_view(e):
+                                t = next((task for task in all_tasks if task['id'] == e.args['id']), None)
+                                if t: ui_components.open_task_detail_modal(t, render_kanban_board.refresh) 
 
-# 呼叫並畫出這個結界
-render_kanban_board()
+                            history_table.on('restore', handle_restore)
+                            history_table.on('delete', handle_delete)
+                            history_table.on('view', handle_view)
+
+                            history_table.add_slot('body-cell-actions', '''
+                                <q-td :props="props">
+                                    <q-btn flat dense round color="blue-4" icon="visibility" @click="() => $parent.$emit('view', props.row)" />
+                                    <q-btn flat dense round color="green-4" icon="undo" @click="() => $parent.$emit('restore', props.row)" />
+                                    <q-btn flat dense round color="red-4" icon="delete" @click="() => $parent.$emit('delete', props.row)" />
+                                </q-td>
+                            ''')
+
+    render_kanban_board()
+
 
 # ==========================================
-# 🚀 啟動伺服器
+# 🛡️ 資安啟動區
 # ==========================================
-ui.run(title='戰略指揮中心', favicon='🔥')
+SECRET_KEY = os.environ.get('WAR_ROOM_SECRET', 'local_development_fallback_secret_12345')
+
+ui.run(
+    host='0.0.0.0', 
+    port=8080, 
+    title='戰略指揮中心', 
+    favicon='🔥', 
+    dark=True, 
+    storage_secret=SECRET_KEY, 
+    uvicorn_reload_includes='*.py,*.css'
+)
