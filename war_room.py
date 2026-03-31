@@ -1,17 +1,29 @@
+# ==========================================
+# 1. 第三方與標準套件庫
+# ==========================================
 from nicegui import app, ui 
-import database
-import calendar        
+from dotenv import load_dotenv  # 🌟 補上這個！負責解析 .env 檔案
 from datetime import datetime 
-import ui_components 
-import os
-import line_notifier
-import csv
-import io  # 🌟 處理 CSV 匯入必須的套件
 from apscheduler.schedulers.background import BackgroundScheduler
-import line_notifier
-from nicegui import app, ui  # 確保有 import app
+import os
+import io
+import csv
+import calendar        
 
-# 🌟 專為 UptimeRobot 開設的極輕量後門
+# ==========================================
+# 2. 專案自訂模組
+# ==========================================
+import database
+import ui_components 
+import line_notifier
+
+# ==========================================
+# 3. 系統初始化與後門設定
+# ==========================================
+# 🌟 啟動環境變數讀取 (讓下方的 os.getenv 能成功抓到密碼)
+load_dotenv()
+
+# 🌟 專為 UptimeRobot 開設的極輕量後門 (Health Check)
 @app.get('/health')
 def health_check():
     return 'War Room is Alive!'
@@ -61,7 +73,7 @@ body { background-color: #0f172a !important; color: #f8fafc !important; font-fam
 # ==========================================
 # 🛡️ 終極防護罩：Firebase Google 登入引擎
 # ==========================================
-firebase_js = '''
+firebase_js_template = '''
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
 <script>
