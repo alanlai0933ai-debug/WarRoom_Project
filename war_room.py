@@ -22,7 +22,7 @@ scheduler = BackgroundScheduler()
 # 每天早上 08:30 準時發射今日戰報
 # hour='8', minute='30' 代表每天早上八點半
 scheduler.add_job(line_notifier.send_daily_briefing, 'cron', hour=8, minute=30)
-
+ 
 # 啟動排程 (它會在背景安靜地跑，不影響網頁操作)
 if not scheduler.running:
     scheduler.start()
