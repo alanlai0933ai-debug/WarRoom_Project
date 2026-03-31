@@ -243,7 +243,8 @@ def create_event_badge(t, refresh_cb):
 # ==========================================
 # 🛠️ 模組化工具 4：新增任務彈出視窗 
 # ==========================================
-def open_new_task_dialog(project_list, refresh_cb, default_parent_id='', default_project=''):
+# 🌟 修正 1：參數加上 current_year 預設值
+def open_new_task_dialog(project_list, refresh_cb, default_parent_id='', default_project='', current_year=115):
     all_t = database.get_all_tasks()
     options = {'': '👑 本身為獨立大任務 (無爸爸)'}
     for t in all_t:
@@ -253,7 +254,11 @@ def open_new_task_dialog(project_list, refresh_cb, default_parent_id='', default
     with ui.dialog() as new_task_dialog, ui.card().classes('w-[600px] p-6 rounded-2xl shadow-2xl'):
         ui.label('✨ 新增戰略任務').classes('text-xl font-extrabold text-blue-400 mb-4')
         
-        task_name = ui.input('任務名稱 / 查核點').classes('w-full mb-2').props('dark outlined')
+        # 🌟 修正 2：加入「執行年度」下拉選單，並與任務名稱排在同一行
+        with ui.row().classes('w-full gap-2 no-wrap mb-2'):
+            year_input = ui.select([113, 114, 115, 116], label='📅 執行年度', value=current_year).classes('w-1/4').props('dark outlined')
+            task_name = ui.input('任務名稱 / 查核點').classes('w-3/4').props('dark outlined')
+            
         with ui.row().classes('w-full gap-2 no-wrap'):
             val_proj = default_project if default_project in project_list else (project_list[0] if project_list else '')
             project_select = ui.select(project_list, label='所屬專案', value=val_proj).classes('w-1/2').props('dark outlined')
@@ -292,7 +297,8 @@ def open_new_task_dialog(project_list, refresh_cb, default_parent_id='', default
                 owner=owner_input.value, due_date=due_date_input.value, status='📋 待辦事項',
                 detailed_status=detailed_status_select.value, vendor_and_notes=vendor_notes_input.value,
                 is_urgent=1 if is_urgent.value else 0, parent_id=p_id,
-                weight=int(weight_input.value), target_total=int(target_input.value), current_progress=0
+                weight=int(weight_input.value), target_total=int(target_input.value), current_progress=0,
+                year=year_input.value # 🌟 修正 3：把選定的年度傳給資料庫！
             )
             ui.notify(f'✅ 已成功寫入資料庫！', type='positive', position='top-right')
             new_task_dialog.close()
