@@ -66,7 +66,7 @@ firebase_js = '''
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
 <script>
   const firebaseConfig = {
-    apiKey: "AIzaSyAq1hfpgcTDaVm2RSd6m-ny8mSiy9tDE94",
+    apiKey: "SECRET_API_KEY_PLACEHOLDER",  // 👈 這裡改成佔位符,
     authDomain: "warroom-f3e51.firebaseapp.com",
     projectId: "warroom-f3e51",
     storageBucket: "warroom-f3e51.firebasestorage.app",
@@ -86,6 +86,8 @@ firebase_js = '''
   async function signOutGoogle() { await auth.signOut(); }
 </script>
 '''
+FIREBASE_API_KEY = os.getenv('FIREBASE_API_KEY', '找不到金鑰')
+firebase_js = firebase_js_template.replace("SECRET_API_KEY_PLACEHOLDER", FIREBASE_API_KEY)
 
 @ui.page('/')
 async def main_page():
