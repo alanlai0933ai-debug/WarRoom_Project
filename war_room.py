@@ -4,8 +4,28 @@ import calendar
 from datetime import datetime 
 import ui_components 
 import os
+import line_notifier
 import csv
 import io  # 🌟 處理 CSV 匯入必須的套件
+from apscheduler.schedulers.background import BackgroundScheduler
+import line_notifier
+from nicegui import app, ui  # 確保有 import app
+
+# 🌟 專為 UptimeRobot 開設的極輕量後門
+@app.get('/health')
+def health_check():
+    return 'War Room is Alive!'
+
+# 🌟 建立背景排程器
+scheduler = BackgroundScheduler()
+
+# 每天早上 08:30 準時發射今日戰報
+# hour='8', minute='30' 代表每天早上八點半
+scheduler.add_job(line_notifier.send_daily_briefing, 'cron', hour=8, minute=30)
+
+# 啟動排程 (它會在背景安靜地跑，不影響網頁操作)
+if not scheduler.running:
+    scheduler.start()
 
 # 🌟 第一步：確認資料庫存在與升級
 database.init_db()
@@ -107,33 +127,75 @@ async def main_page():
         'calendar_month': datetime.now().month   
     }
 
-    # 🌟 批次匯入引擎 (支援母帶子與年度標記)
+# 🌟 批次匯入引擎 (專為最新版 NiceGUI 3.0+ 打造)
     async def handle_csv_upload(e):
-        content = e.content.read().decode('utf-8-sig')
-        f = io.StringIO(content)
-        reader = csv.DictReader(f)
-        all_tasks_now = database.get_all_tasks()
-        name_to_id = {t['title']: t['id'] for t in all_tasks_now}
-        count = 0
-        try:
+        try: 
+            # 🛡️ 終極修正：加上 await，告訴 Python 要「等待」檔案非同步讀取完畢
+            raw_data = await e.file.read()
+            
+            # 🧠 智慧解碼：先試 UTF-8，失敗則自動切換為 Excel 的 Big5
+            try:
+                content = raw_data.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                content = raw_data.decode('big5')
+                
+            f = io.StringIO(content)
+            reader = csv.DictReader(f)
+            
+            # 🚨 表頭防呆機制
+            headers = reader.fieldnames
+            if not headers or '專案名稱' not in headers:
+                ui.notify(f'❌ 找不到「專案名稱」欄位！目前讀到的表頭: {headers}', type='negative', position='top')
+                return
+
+            all_tasks_now = database.get_all_tasks()
+            name_to_id = {t['title']: t['id'] for t in all_tasks_now}
+            count = 0
+            
             for row in reader:
-                parent_name = row.get('母任務名稱', '').strip()
+                # 1. 抓取母任務與其他數字
+                parent_name = row.get('母任務名稱 (留空代表自己是母任務)', '').strip()
                 parent_id = name_to_id.get(parent_name) if parent_name else None
+                raw_weight = row.get('權重', '1').strip()
+                raw_target = row.get('目標總數', '1').strip()
+                raw_urgent = row.get('是否急件', '0').strip()
+                
+                # 🌟 2. 核心修正：自動化日期格式轉換 (2026/6/30 -> 2026-06-30)
+                raw_date = row.get('預計完成時間', '').strip()
+                formatted_date = raw_date
+                if raw_date:
+                    raw_date = raw_date.replace('/', '-') # 先把斜線換成橫線
+                    parts = raw_date.split('-')
+                    # 如果成功切成 年、月、日 三塊，就強制幫月份和日期補上 0
+                    if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit() and parts[2].isdigit():
+                        formatted_date = f"{parts[0]}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+
+                # 3. 寫入資料庫
                 database.add_task(
-                    project_name=row['專案名稱'], title=row['任務名稱'], tag=row.get('標籤', '未分類'),
-                    owner=row.get('主責人員', '未分配'), due_date=row.get('預計完成時間', ''),
-                    status=row.get('狀態', '📋 待辦事項'), detailed_status='', vendor_and_notes='',
-                    is_urgent=int(row.get('是否急件', 0)), parent_id=parent_id,
-                    weight=int(row.get('權重', 1)), target_total=int(row.get('目標總數', 1)),
-                    year=app_state['selected_year'] # 自動打上當前選擇的年度
+                    project_name=row.get('專案名稱', '').strip(), 
+                    title=row.get('任務名稱', '').strip(), 
+                    tag=row.get('標籤', '未分類').strip(),
+                    owner=row.get('主責人員', '未分配').strip(), 
+                    due_date=formatted_date, # 🌟 改用轉換過的安全日期
+                    status=row.get('狀態', '📋 待辦事項').strip(), 
+                    detailed_status='', 
+                    vendor_and_notes='',
+                    is_urgent=1 if raw_urgent == '1' else 0, 
+                    parent_id=parent_id,
+                    weight=int(raw_weight) if raw_weight.isdigit() else 1, 
+                    target_total=int(raw_target) if raw_target.isdigit() else 1,
+                    year=app_state['selected_year']
                 )
+                
                 if not parent_id: 
                     new_all = database.get_all_tasks()
                     if new_all: name_to_id[new_all[-1]['title']] = new_all[-1]['id']
                 count += 1
-            ui.notify(f'🚀 成功匯入 {count} 筆資料！', type='positive', position='top')
+                
+            ui.notify(f'🚀 戰略物資投射成功！共匯入 {count} 筆資料。', type='positive', position='top')
             render_kanban_board.refresh()
             upload_dialog.close()
+            
         except Exception as err:
             ui.notify(f'❌ 匯入失敗：{str(err)}', type='negative', position='top')
 
@@ -167,7 +229,7 @@ async def main_page():
                 
             ui.button('登出', on_click=perform_logout, color='slate-700').props('outline rounded size="sm" text-color="white"')
             ui.button('➕ 新增任務', on_click=lambda: ui_components.open_new_task_dialog(PROJECT_LIST, render_kanban_board.refresh, app_state['selected_year']), color='blue-600').classes('font-bold shadow-lg')
-
+            ui.button('📢 發送今日戰情至 LINE', on_click=lambda: line_notifier.send_daily_briefing(), color='green-6').classes('font-bold shadow-lg')
 
     # 🔍 全局搜尋區
     def update_search(e):
@@ -176,6 +238,115 @@ async def main_page():
 
     with ui.row().classes('w-full max-w-7xl mx-auto mt-6 px-4'):
         ui.input('🔍 全局智慧搜尋 (支援：任務名稱 / 負責人 / 標籤 / 日誌 / 狀態)', value=app_state['search_query'], on_change=update_search).classes('w-full text-lg').props('clearable outlined dark rounded-xl shadow-sm debounce="500"')
+# ==========================================
+        # 🌟 核心武器：WBS 無限層級樹狀進度矩陣 (UX 完美打磨版)
+        # ==========================================
+        def build_wbs_tree(task_list, current_parent_id=None, depth=0):
+            children = [t for t in task_list if t.get('parent_id') == current_parent_id]
+            if not children: return
+
+            # 🧠 防呆轉換：確保 expanded_tasks 是一個能記住 ID 的字典
+            if not isinstance(app_state.get('expanded_tasks'), dict):
+                app_state['expanded_tasks'] = {}
+
+            with ui.column().classes('w-full gap-1'):
+                for t in children:
+                    task_id = t['id']
+                    has_children = any(c.get('parent_id') == task_id for c in task_list)
+                    
+                    def get_rollup(t_id):
+                        kids = [k for k in task_list if k.get('parent_id') == t_id]
+                        if not kids:
+                            this_t = next(x for x in task_list if x['id'] == t_id)
+                            return this_t.get('current_progress', 0), this_t.get('target_total', 1)
+                        c_total, t_total = 0, 0
+                        for k in kids:
+                            c_cur, c_tgt = get_rollup(k['id'])
+                            c_total += c_cur
+                            t_total += c_tgt
+                        return c_total, t_total
+
+                    if has_children:
+                        current, target = get_rollup(task_id)
+                    else:
+                        current = t.get('current_progress', 0)
+                        target = t.get('target_total', 1)
+
+                    prog_pct = (current / target) if target > 0 else 0
+                    
+                    bg_color = 'bg-slate-800' if depth == 0 else ('bg-slate-800/40' if depth == 1 else 'bg-transparent')
+                    border = 'border-l-4 border-blue-500' if depth == 0 else f'border-l-2 border-slate-600 ml-{depth * 4}'
+
+                    # 🌟 修正 3：利用 expand-icon-toggle 鎖死沒有子任務的面板，拒絕展開空白列
+                    exp_props = 'dense expand-icon-class="text-white"'
+                    if not has_children: 
+                        exp_props += ' hide-expand-icon expand-icon-toggle'
+
+                    # 🌟 修正 2：讀取並綁定面板的記憶狀態，維持您的閱讀位置
+                    is_expanded = app_state['expanded_tasks'].get(task_id, depth < 1)
+                    def handle_toggle(e, tid=task_id):
+                        app_state['expanded_tasks'][tid] = e.value
+
+                    with ui.expansion(value=is_expanded, on_value_change=handle_toggle).classes(f'w-full {bg_color} {border} rounded-r-lg mb-1').props(exp_props) as exp:
+                        with exp.add_slot('header'):
+                            with ui.row().classes('w-full items-center justify-between no-wrap hover:bg-white/5 transition-colors p-2 rounded-lg gap-4'):
+                                
+                                # 👈 左側：任務名稱
+                                with ui.row().classes('items-center gap-3 flex-1 w-0 no-wrap'):
+                                    if has_children:
+                                        is_done_visually = (current >= target and target > 0)
+                                    else:
+                                        is_done_visually = (t['status'] == '✅ 已完成') or (current >= target)
+
+                                    status_icon = '✅' if is_done_visually else ('🛑' if t['status'] == '🛑 卡關中' else '📋')
+                                    
+                                    ui.label(f"{status_icon} {t['title']}").classes('font-bold text-gray-200 text-sm md:text-base truncate flex-1').tooltip(t['title'])
+                                    if depth > 0: ui.badge(t['tag'], color='slate-600').props('transparent').classes('shrink-0')
+                                
+                                # 👉 右側：進度與操作按鈕
+                                with ui.row().classes('items-center gap-2 justify-end flex-none'):
+                                    ui.label(t['owner']).classes('text-xs text-blue-300 font-bold hidden md:block mr-2')
+                                    
+                                    with ui.column().classes('w-20 gap-0 items-end mr-1'):
+                                        ui.label(f"{current} / {target}").classes('text-[10px] text-gray-400 font-mono')
+                                        
+                                        # 🌟 修正 1：加上 show_value=False，隱藏可怕的無限小數
+                                        ui.linear_progress(value=prog_pct, show_value=False).props('color="blue-4" rounded size="6px"')
+                                        
+                                    def handle_add_one(task_id=t['id'], cur=current, tgt=target, task_title=t['title']):
+                                        conn = database.get_db_connection()
+                                        c = conn.cursor()
+                                        new_prog = cur + 1
+                                        if new_prog >= tgt:
+                                            c.execute("UPDATE tasks SET current_progress = ?, status = '✅ 已完成' WHERE id = ?", (tgt, task_id))
+                                            ui.notify(f'🎉 目標達成！', type='positive', position='top-right')
+                                        else:
+                                            c.execute("UPDATE tasks SET current_progress = ? WHERE id = ?", (new_prog, task_id))
+                                        conn.commit()
+                                        conn.close()
+                                        render_kanban_board.refresh()
+
+                                    def handle_minus_one(task_id=t['id'], cur=current, task_status=t['status']):
+                                        if cur <= 0: return
+                                        new_prog = cur - 1
+                                        new_status = '📋 待辦事項' if task_status == '✅ 已完成' else task_status
+                                        conn = database.get_db_connection()
+                                        c = conn.cursor()
+                                        c.execute("UPDATE tasks SET current_progress = ?, status = ? WHERE id = ?", (new_prog, new_status, task_id))
+                                        conn.commit()
+                                        conn.close()
+                                        render_kanban_board.refresh()
+
+                                    if not has_children:
+                                        ui.button(icon='remove', on_click=handle_minus_one).props(f'flat dense size="sm" {"disable" if current <= 0 else ""} color="red-4"').classes('bg-red-900/20 rounded')
+                                        ui.button(icon='add', on_click=handle_add_one).props(f'flat dense size="sm" {"disable" if is_done_visually else ""} color="green-4"').classes('bg-green-900/20 rounded')
+
+                                    ui.button(icon='edit', on_click=lambda task=t: ui_components.open_task_detail_modal(task, render_kanban_board.refresh)).props('flat dense size="sm" color="gray-400"')
+
+                        # 🌀 遞迴呼叫下一層
+                        if has_children:
+                            with ui.column().classes('w-full pb-2'):
+                                build_wbs_tree(task_list, current_parent_id=t['id'], depth=depth + 1)
 # ==========================================
     # 🏠 主體排版與看板邏輯
     # ==========================================
@@ -311,18 +482,17 @@ async def main_page():
                                                 d_str = f"{c_year}-{c_month:02d}-{day:02d}"
                                                 for t in [t for t in display_tasks if t['due_date'] == d_str]: ui_components.create_event_badge(t, render_kanban_board.refresh)
 
+                        # ✅ 貼上這段全新升級的 WBS 樹狀引擎
                         for proj_name in PROJECT_LIST:
                             with ui.tab_panel(tab_objects[proj_name]):
-                                with ui.row().classes('w-full items-start gap-4 no-wrap overflow-x-auto'):
-                                    top_level_tasks = [t for t in display_tasks if t['project_name'] == proj_name and not t.get('parent_id')]
-                                    with ui.column().classes('w-1/2 bg-white/5 p-4 rounded-xl border border-white/10'):
-                                        ui.label('📋 執行中事項').classes('font-bold text-gray-200 mb-2')
-                                        for t in top_level_tasks:
-                                            if t.get('status') == '📋 待辦事項': ui_components.create_rich_card(t, display_tasks, app_state, render_kanban_board.refresh)
-                                    with ui.column().classes('w-1/2 bg-orange-500/10 p-4 rounded-xl border border-orange-500/20'):
-                                        ui.label('🛑 等待外部回覆 (Blocked)').classes('font-bold text-orange-300 mb-2')
-                                        for t in top_level_tasks:
-                                            if t.get('status') == '🛑 卡關中': ui_components.create_rich_card(t, display_tasks, app_state, render_kanban_board.refresh)
+                                # 撈出這個專案的所有任務 (包含母、子、孫)
+                                my_proj_tasks = [t for t in display_tasks if t['project_name'] == proj_name]
+                                
+                                with ui.card().classes('w-full bg-white/5 border border-white/10 p-4 shadow-lg'):
+                                    ui.label('📊 WBS 戰略進度總表').classes('text-lg font-bold text-gray-100 mb-4 tracking-wide')
+                                    
+                                    # 🚀 啟動遞迴引擎！(從沒有爸爸的最上層任務開始往下找)
+                                    build_wbs_tree(my_proj_tasks, current_parent_id=None, depth=0)
 
                         with ui.tab_panel(tab_archive):
                             with ui.row().classes('w-full justify-between items-center mb-4'):
