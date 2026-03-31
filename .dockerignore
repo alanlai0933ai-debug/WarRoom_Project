@@ -1,6 +1,7 @@
 # 忽略 Git 版本控制檔案
 .git/
 .gitignore
+.github/
 
 # 忽略環境變數與機密金鑰
 .env
@@ -17,7 +18,16 @@ venv/
 .venv/
 env.bak/
 venv.bak/
+# 🌟 攔截您專屬的虛擬環境名稱
+python_env/
 
 # 忽略 SQLite 資料庫檔案 (避免覆蓋雲端現有的資料)
 *.sqlite3
 *.db
+
+# 🌟 攔截 NiceGUI 本地暫存
+.nicegui/
+
+# 🌟 攔截開發者的個人筆記與雜物資料夾
+other/
+*.txt
