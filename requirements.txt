@@ -2,3 +2,4 @@ nicegui
 requests
 python-dotenv
 apscheduler
+pytz
