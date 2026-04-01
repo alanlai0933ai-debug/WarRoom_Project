@@ -1,5 +1,47 @@
 import sqlite3
 import os
+import sqlite3
+from datetime import datetime, timedelta
+
+def get_tasks_by_range(period="今天"):
+    conn = sqlite3.connect('/data/war_room.db')
+    cursor = conn.cursor()
+    
+    # 🌟 設定時間邊界 (台北時間)
+    now = datetime.now()
+    if period == "今天":
+        start_date = now.strftime('%Y-%m-%d')
+        query = "SELECT title FROM tasks WHERE date = ?"
+        params = (start_date,)
+    elif period == "本週":
+        # 取得週一日期
+        start_week = (now - timedelta(days=now.weekday())).strftime('%Y-%m-%d')
+        end_week = (now + timedelta(days=6-now.weekday())).strftime('%Y-%m-%d')
+        query = "SELECT title FROM tasks WHERE date BETWEEN ? AND ?"
+        params = (start_week, end_week)
+    elif period == "本月":
+        start_month = now.strftime('%Y-%m-01')
+        query = "SELECT title FROM tasks WHERE date LIKE ?"
+        params = (now.strftime('%Y-%m-%'),)
+    
+    cursor.execute(query, params)
+    tasks = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return tasks
+
+def build_report_message(period, tasks):
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    title = f"🔥 指議官早安！{period}戰情摘要 ({date_str})"
+    separator = "━━━━━━━━━━━━━━━"
+    
+    if not tasks:
+        content = "✅ 目前暫無待辦案件，一切正常！"
+    else:
+        # 將資料庫任務清單轉化為警報圖示
+        content = "\n".join([f"🚨 [🌱 專案] {task}" for task in tasks])
+    
+    footer = "\n🔗 請登入戰情室查看詳情或更新進度！"
+    return f"{title}\n{separator}\n{content}\n{footer}"
 
 # 🌟 雲端智慧路徑：確保在 Fly.io 掛載的 /data 下運作
 DB_PATH = '/data/war_room.db' if os.path.exists('/data') else 'war_room.db'

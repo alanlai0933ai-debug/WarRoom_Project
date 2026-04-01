@@ -2,13 +2,19 @@
 # 1. 第三方與標準套件庫
 # ==========================================
 from nicegui import app, ui 
-from dotenv import load_dotenv  # 🌟 補上這個！負責解析 .env 檔案
+from dotenv import load_dotenv 
 from datetime import datetime 
 from apscheduler.schedulers.background import BackgroundScheduler
+from pytz import timezone  # 🌟 移到這裡集中管理
 import os
 import io
 import csv
-import calendar        
+import calendar
+from fastapi import Request, HTTPException
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+import os        
 
 # ==========================================
 # 2. 專案自訂模組
@@ -20,26 +26,85 @@ import line_notifier
 # ==========================================
 # 3. 系統初始化與後門設定
 # ==========================================
-# 🌟 啟動環境變數讀取 (讓下方的 os.getenv 能成功抓到密碼)
 load_dotenv()
 
-# 🌟 專為 UptimeRobot 開設的極輕量後門 (Health Check)
 @app.get('/health')
 def health_check():
     return 'War Room is Alive!'
 
-# 🌟 建立背景排程器
-scheduler = BackgroundScheduler()
+# ==========================================
+# 4. 升級版背景排程器 (台北時區)
+# ==========================================
+tw_tz = timezone('Asia/Taipei')
+scheduler = BackgroundScheduler(timezone=tw_tz)
 
-# 每天早上 08:30 準時發射今日戰報
-# hour='8', minute='30' 代表每天早上八點半
-scheduler.add_job(line_notifier.send_daily_briefing, 'cron', hour=8, minute=30)
- 
-# 啟動排程 (它會在背景安靜地跑，不影響網頁操作)
+# 1️⃣ 每日 08:30：發送今日進度 (現有任務)
+scheduler.add_job(
+    lambda: line_notifier.send_daily_briefing("今天"), 
+    'cron', hour=8, minute=30
+)
+
+# 2️⃣ 每週一 08:00：發送「本週」戰情摘要
+# 🌟 day_of_week='mon' 代表每個禮拜一
+scheduler.add_job(
+    lambda: line_notifier.send_daily_briefing("本週"), 
+    'cron', day_of_week='mon', hour=8, minute=0
+)
+
+# 3️⃣ 每月 1 號 07:30：發送「本月」戰略佈局
+# 🌟 day=1 代表每個月的第一天
+scheduler.add_job(
+    lambda: line_notifier.send_daily_briefing("本月"), 
+    'cron', day=1, hour=7, minute=30
+)
+
 if not scheduler.running:
     scheduler.start()
 
-# 🌟 第一步：確認資料庫存在與升級
+# ==========================================
+# 2. 啟動 LINE 雙向通訊引擎
+# ==========================================
+line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
+handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
+
+# 🌟 開設情報收發室 (Webhook 端點)
+@app.post("/callback")
+async def callback(request: Request):
+    # 取得 LINE 傳來的數位簽章，確認身分
+    signature = request.headers.get('X-Line-Signature', '')
+    body = await request.body()
+    try:
+        handler.handle(body.decode('utf-8'), signature)
+    except InvalidSignatureError:
+        raise HTTPException(status_code=400, detail="無效的簽章，可能遭駭客攻擊")
+    return 'OK'
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    user_msg = event.message.text.strip()
+    
+    # 🌟 定義支援的關鍵字清單
+    valid_periods = ["今天", "本週", "本月", "今日狀況"]
+    
+    if user_msg in valid_periods:
+        # 轉換關鍵字名稱
+        search_period = "今天" if user_msg == "今日狀況" else user_msg
+        
+        # 執行數據查詢
+        tasks = database.get_tasks_by_range(search_period)
+        
+        # 組建戰報
+        reply_text = build_report_message(search_period, tasks)
+        
+        # 發射回覆
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=reply_text)
+        )
+
+# ==========================================
+# 5. 資料庫初始化
+# ==========================================
 database.init_db()
 database.upgrade_db_schema()
 
