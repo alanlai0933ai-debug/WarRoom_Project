@@ -79,28 +79,26 @@ async def callback(request: Request):
         raise HTTPException(status_code=400, detail="無效的簽章，可能遭駭客攻擊")
     return 'OK'
 
+# 🌟 設定「如果收到文字訊息」要怎麼反應
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_msg = event.message.text.strip()
-    
-    # 🌟 定義支援的關鍵字清單
     valid_periods = ["今天", "本週", "本月", "今日狀況"]
     
     if user_msg in valid_periods:
-        # 轉換關鍵字名稱
-        search_period = "今天" if user_msg == "今日狀況" else user_msg
+        # 傳統關鍵字：交由 line_notifier 產生制式戰報
+        period = "今天" if user_msg == "今日狀況" else user_msg
+        import line_notifier
+        reply_text = line_notifier.get_briefing_message(period)
         
-        # 執行數據查詢
-        tasks = database.get_tasks_by_range(search_period)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         
-        # 組建戰報
-        reply_text = build_report_message(search_period, tasks)
+    else:
+        # 🌟 全新升級：非預設關鍵字的白話文，全面交由 Gemini AI 接管！
+        import ai_agent
+        reply_text = ai_agent.ask_gemini(user_msg)
         
-        # 發射回覆
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=reply_text)
-        )
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
 # ==========================================
 # 5. 資料庫初始化

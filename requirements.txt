@@ -4,3 +4,4 @@ python-dotenv
 apscheduler
 pytz
 line-bot-sdk
+google-generativeai
