@@ -37,7 +37,7 @@ def ask_gemini(user_query):
     
     # 4. 呼叫最新的 Gemini 1.5 Flash 模型進行高速推論
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
